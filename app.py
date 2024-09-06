@@ -8,7 +8,7 @@ import cv2
 from ultralytics import YOLO
 from qdrant_client import QdrantClient
 import streamlit as st
-import time
+from tempfile import NamedTemporaryFile
 
 # Initialize the models and Qdrant client (using your existing setup)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -37,32 +37,21 @@ def detect_and_crop_objects(image):
     return cropped_images, bboxes
 
 def segment_image(image: np.ndarray, bbox: list) -> np.ndarray:
-    # Convert bounding box coordinates to integers
     x_min, y_min, x_max, y_max = map(int, bbox)
-
-    # Crop the image using bounding box
     cropped_image = image[y_min:y_max, x_min:x_max]
-
-    # Perform segmentation on the cropped image
     results = model_segmentation.predict(source=cropped_image)
-    if results and results[0].masks:
-        black_image = np.zeros_like(cropped_image)
-        masks = results[0].masks.xy
-        if masks:
+    black_image = np.zeros_like(cropped_image)
+    for result in results:
+        if result.masks is not None:
+            masks = result.masks.xy
             for mask in masks:
                 mask = np.array(mask, dtype=np.int32)
                 cv2.fillPoly(black_image, [mask], (255, 255, 255))
-            binary_mask = cv2.cvtColor(black_image, cv2.COLOR_BGR2GRAY)
-            _, binary_mask = cv2.threshold(binary_mask, 1, 255, cv2.THRESH_BINARY)
-            segmented_image = cv2.bitwise_and(cropped_image, cropped_image, mask=binary_mask)
-
-            # Resize the segmented image
-            result_image = cv2.resize(segmented_image, (640, 640))
-
-            return result_image
-
-        # Resize the cropped image if no segmentation is performed
-        return cv2.resize(cropped_image, (640, 640))
+    binary_mask = cv2.cvtColor(black_image, cv2.COLOR_BGR2GRAY)
+    _, binary_mask = cv2.threshold(binary_mask, 1, 255, cv2.THRESH_BINARY)
+    segmented_image = cv2.bitwise_and(cropped_image, cropped_image, mask=binary_mask)
+    result_image = cv2.resize(segmented_image, (640, 640))
+    return result_image
 
 def get_image_vector(image_path):
     image = cv2.imread(image_path)
@@ -78,7 +67,7 @@ def get_image_vector(image_path):
     return image_features.cpu().numpy().flatten(), processed_image
 
 def find_top_k_similar_classes_with_qdrant(image_path, unseenmedicine_folder, k=5, top_n=1000):
-    start_time = time.time()  # Start time measurement
+    start_time = time.time()
     image_vector, processed_image = get_image_vector(image_path)
     search_result = qdrant_client.search(
         collection_name=collection_name,
@@ -95,7 +84,7 @@ def find_top_k_similar_classes_with_qdrant(image_path, unseenmedicine_folder, k=
         if len(unique_classes) == k:
             break
     filtered_top_k_classes = sorted(unique_classes.items(), key=lambda x: x[1], reverse=True)
-    processing_time = time.time() - start_time  # End time measurement
+    processing_time = time.time() - start_time
 
     if len(filtered_top_k_classes) < k:
         st.warning("Not enough unique classes found.")
@@ -118,7 +107,6 @@ def find_top_k_similar_classes_with_qdrant(image_path, unseenmedicine_folder, k=
         st.write(f"Confidence: {top_1_score:.4f}")
         if not os.path.exists(unseenmedicine_folder):
             os.makedirs(unseenmedicine_folder)
-        # Save the image only when this condition is met
         shutil.copy(image_path, unseenmedicine_folder)
         class_names.append(f"Image saved to {unseenmedicine_folder}")
 
@@ -133,9 +121,9 @@ unseenmedicine_folder = "unseen_med"
 
 if uploaded_file is not None:
     # Save the uploaded file temporarily
-    image_path = os.path.join(unseenmedicine_folder, uploaded_file.name)  # Save with full path
-    with open(image_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    with NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+        temp_file.write(uploaded_file.getbuffer())
+        image_path = temp_file.name
 
     # Display the uploaded image
     col1, col2 = st.columns(2)
@@ -154,5 +142,5 @@ if uploaded_file is not None:
         for name in class_names:
             st.write(name)
 
-        # Display processing time and top_1_score
+        # Display processing time
         st.write(f"Processing Time: {processing_time:.2f} seconds")
