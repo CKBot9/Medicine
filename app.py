@@ -37,13 +37,9 @@ def detect_and_crop_objects(image):
     return cropped_images, bboxes
 
 def segment_image(image: np.ndarray, bbox: list) -> np.ndarray:
-    # Convert bounding box coordinates to integers
     x_min, y_min, x_max, y_max = map(int, bbox)
-
-    # Crop the image using bounding box
     cropped_image = image[y_min:y_max, x_min:x_max]
 
-    # Perform segmentation on the cropped image
     results = model_segmentation.predict(source=cropped_image)
     if results and results[0].masks:
         black_image = np.zeros_like(cropped_image)
@@ -56,12 +52,10 @@ def segment_image(image: np.ndarray, bbox: list) -> np.ndarray:
             _, binary_mask = cv2.threshold(binary_mask, 1, 255, cv2.THRESH_BINARY)
             segmented_image = cv2.bitwise_and(cropped_image, cropped_image, mask=binary_mask)
 
-            # Resize the segmented image
             result_image = cv2.resize(segmented_image, (640, 640))
 
             return result_image
 
-        # Resize the cropped image if no segmentation is performed
         return cv2.resize(cropped_image, (640, 640))
 
 def get_image_vector(image_path):
@@ -76,6 +70,21 @@ def get_image_vector(image_path):
     with torch.no_grad():
         image_features = model.get_image_features(**inputs)
     return image_features.cpu().numpy().flatten(), processed_image
+
+# Function to safely copy the image if it's unseen
+def safe_copy_unseen_image(image_path, unseenmedicine_folder):
+    file_name = os.path.basename(image_path)
+    destination_path = os.path.join(unseenmedicine_folder, file_name)
+    
+    if os.path.exists(destination_path):
+        base, ext = os.path.splitext(file_name)
+        counter = 1
+        while os.path.exists(destination_path):
+            destination_path = os.path.join(unseenmedicine_folder, f"{base}_{counter}{ext}")
+            counter += 1
+    
+    shutil.copy(image_path, destination_path)
+    return destination_path
 
 def find_top_k_similar_classes_with_qdrant(image_path, unseenmedicine_folder, k=5, top_n=1000):
     start_time = time.time()  # Start time measurement
@@ -118,9 +127,8 @@ def find_top_k_similar_classes_with_qdrant(image_path, unseenmedicine_folder, k=
         st.write(f"Confidence: {top_1_score:.4f}")
         if not os.path.exists(unseenmedicine_folder):
             os.makedirs(unseenmedicine_folder)
-        # Save the image only when this condition is met
-        shutil.copy(image_path, unseenmedicine_folder)
-        class_names.append(f"Image saved to {unseenmedicine_folder}")
+        saved_path = safe_copy_unseen_image(image_path, unseenmedicine_folder)
+        class_names.append(f"Image saved to {saved_path}")
 
     return processed_image, class_names, processing_time
 
@@ -132,27 +140,21 @@ uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
 unseenmedicine_folder = "unseen_med"
 
 if uploaded_file is not None:
-    # Save the uploaded file temporarily
-    image_path = os.path.join(unseenmedicine_folder, uploaded_file.name)  # Save with full path
+    image_path = os.path.join(unseenmedicine_folder, uploaded_file.name)
     with open(image_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    # Display the uploaded image
     col1, col2 = st.columns(2)
     with col1:
         st.image(image_path, caption="Uploaded Image", use_column_width=True)
 
-    # Start Processing
     if st.button("Start Processing"):
         processed_image, class_names, processing_time = find_top_k_similar_classes_with_qdrant(image_path, unseenmedicine_folder, k=5)
 
-        # Display the processed image
         with col2:
             st.image(cv2.cvtColor(processed_image, cv2.COLOR_BGR2RGB), caption="Processed Image", use_column_width=True)
 
-        # Display class names and similarity scores
         for name in class_names:
             st.write(name)
 
-        # Display processing time and top_1_score
         st.write(f"Processing Time: {processing_time:.2f} seconds")
