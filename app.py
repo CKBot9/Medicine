@@ -129,7 +129,7 @@ st.title("Medicine Image Processing")
 
 # Upload Image
 uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
-unseenmedicine_folder = r"C:\Users\USER\PycharmProjects\MED_V3\unseen_med"
+unseenmedicine_folder = "unseen_med"
 
 if uploaded_file is not None:
     # Save the uploaded file temporarily
