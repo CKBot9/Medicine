@@ -137,7 +137,7 @@ st.title("Medicine Image Processing")
 
 # Upload Image
 uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
-unseenmedicine_folder = "CKbot9/Medicine/unseen_med"
+unseenmedicine_folder = "unseen_med"
 
 if uploaded_file is not None:
     image_path = os.path.join(unseenmedicine_folder, uploaded_file.name)
