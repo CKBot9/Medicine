@@ -3,7 +3,6 @@ Pillow
 torch
 transformers
 opencv-python-headless
-opencv-python
 ultralytics
 qdrant-client
 streamlit
