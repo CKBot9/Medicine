@@ -14,9 +14,8 @@ import time
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
-yolo_model_path = r"C:\Users\USER\PycharmProjects\MED_V3\best_yolo.pt"
-segment_model_path = r"C:\Users\USER\PycharmProjects\MED_V3\best_segment.pt"
-model_detection = YOLO(yolo_model_path)
+segment_model_path = "best_segment.pt"
+model_detection = YOLO(segment_model_path)
 model_segmentation = YOLO(segment_model_path)
 collection_name = "Medicine_Group"
 qdrant_client = QdrantClient(
